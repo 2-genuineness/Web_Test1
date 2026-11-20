@@ -1,0 +1,395 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>팩맨 게임</title>
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: #10101c;
+    color: white;
+    font-family: Arial, sans-serif;
+    text-align: center;
+}
+
+h1 {
+    color: #ffdf00;
+    margin-top: 25px;
+}
+
+#info {
+    display: flex;
+    justify-content: center;
+    gap: 35px;
+    font-size: 18px;
+    margin: 15px;
+}
+
+canvas {
+    background: #080818;
+    border: 3px solid #263cff;
+    border-radius: 8px;
+    max-width: 95vw;
+}
+
+button {
+    background: #ffdf00;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    margin: 15px;
+}
+
+p {
+    color: #aaa;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🟡 PAC-MAN</h1>
+
+<div id="info">
+    <span>점수: <b id="score">0</b></span>
+    <span>목숨: <b id="lives">3</b></span>
+</div>
+
+<canvas id="game" width="560" height="480"></canvas>
+
+<div>
+    <button onclick="restart()">다시 시작</button>
+</div>
+
+<p>방향키 ↑ ↓ ← → 로 팩맨을 움직이세요!</p>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const size = 28;
+const cols = 20;
+const rows = 17;
+
+// 1은 벽, 0은 길
+const originalMap = [
+"11111111111111111111",
+"10000000010000000001",
+"10111011010011011101",
+"10000000000000000001",
+"10110111011011101101",
+"10000000000000000001",
+"10111010111010111001",
+"10000010000010000001",
+"11101011101110101111",
+"10000000000000000001",
+"10111010111010111001",
+"10000010000010000001",
+"10110111011011101101",
+"10000000000000000001",
+"10111011010011011101",
+"10000000000000000001",
+"11111111111111111111"
+];
+
+let map;
+let pacman;
+let ghosts;
+let score = 0;
+let lives = 3;
+let gameOver = false;
+let won = false;
+let direction = {x:0, y:0};
+let nextDirection = {x:0, y:0};
+let tick = 0;
+
+function restart() {
+    map = originalMap.map(row =>
+        row.split("").map(Number)
+    );
+
+    score = 0;
+    lives = 3;
+    gameOver = false;
+    won = false;
+    tick = 0;
+
+    pacman = {
+        x: 1,
+        y: 1
+    };
+
+    direction = {x:0, y:0};
+    nextDirection = {x:0, y:0};
+
+    ghosts = [
+        {x:18, y:1, color:"#ff4444", dx:-1, dy:0},
+        {x:18, y:15, color:"#ff80c0", dx:0, dy:-1},
+        {x:1, y:15, color:"#44ddff", dx:1, dy:0}
+    ];
+
+    updateInfo();
+}
+
+function updateInfo() {
+    document.getElementById("score").textContent = score;
+    document.getElementById("lives").textContent = lives;
+}
+
+function canMove(x,y) {
+    return x >= 0 && x < cols &&
+           y >= 0 && y < rows &&
+           map[y][x] === 0;
+}
+
+document.addEventListener("keydown", e => {
+    const keys = {
+        ArrowUp: [0,-1],
+        ArrowDown: [0,1],
+        ArrowLeft: [-1,0],
+        ArrowRight: [1,0]
+    };
+
+    if (keys[e.key]) {
+        e.preventDefault();
+        nextDirection = {
+            x: keys[e.key][0],
+            y: keys[e.key][1]
+        };
+    }
+});
+
+function movePacman() {
+    if (canMove(
+        pacman.x + nextDirection.x,
+        pacman.y + nextDirection.y
+    )) {
+        direction = {...nextDirection};
+    }
+
+    const nx = pacman.x + direction.x;
+    const ny = pacman.y + direction.y;
+
+    if (canMove(nx, ny)) {
+        pacman.x = nx;
+        pacman.y = ny;
+    }
+
+    if (map[pacman.y][pacman.x] === 0) {
+        map[pacman.y][pacman.x] = 2;
+        score += 10;
+        updateInfo();
+    }
+
+    checkWin();
+}
+
+function moveGhosts() {
+    ghosts.forEach(g => {
+        let options = [
+            {x:1,y:0},
+            {x:-1,y:0},
+            {x:0,y:1},
+            {x:0,y:-1}
+        ].filter(d => canMove(g.x+d.x,g.y+d.y));
+
+        if (options.length > 0) {
+            // 플레이어를 향해 이동하거나 방향을 바꿈
+            let target = options.sort((a,b) => {
+                let da = Math.abs(g.x+a.x-pacman.x) +
+                         Math.abs(g.y+a.y-pacman.y);
+                let db = Math.abs(g.x+b.x-pacman.x) +
+                         Math.abs(g.y+b.y-pacman.y);
+                return da-db;
+            });
+
+            let choice = Math.random() < 0.7
+                ? target[0]
+                : options[Math.floor(Math.random()*options.length)];
+
+            g.x += choice.x;
+            g.y += choice.y;
+        }
+    });
+}
+
+function checkCollision() {
+    for (let g of ghosts) {
+        if (g.x === pacman.x && g.y === pacman.y) {
+            lives--;
+            updateInfo();
+
+            if (lives <= 0) {
+                gameOver = true;
+            } else {
+                pacman.x = 1;
+                pacman.y = 1;
+
+                ghosts = [
+                    {x:18,y:1,color:"#ff4444"},
+                    {x:18,y:15,color:"#ff80c0"},
+                    {x:1,y:15,color:"#44ddff"}
+                ];
+            }
+            break;
+        }
+    }
+}
+
+function checkWin() {
+    let remaining = map.some(row =>
+        row.some(cell => cell === 0)
+    );
+
+    if (!remaining) won = true;
+}
+
+function drawPacman() {
+    let angle = Math.atan2(direction.y,direction.x);
+    if (direction.x === 0 && direction.y === 0) angle = 0;
+
+    ctx.fillStyle = "#ffdf00";
+    ctx.beginPath();
+
+    let mouth = Math.abs(Math.sin(tick/3))*0.35;
+
+    ctx.moveTo(
+        pacman.x*size+size/2,
+        pacman.y*size+size/2
+    );
+
+    ctx.arc(
+        pacman.x*size+size/2,
+        pacman.y*size+size/2,
+        11,
+        angle+mouth,
+        angle+Math.PI*2-mouth
+    );
+
+    ctx.closePath();
+    ctx.fill();
+}
+
+function drawGhost(g) {
+    let x = g.x*size+14;
+    let y = g.y*size+14;
+
+    ctx.fillStyle = g.color;
+    ctx.beginPath();
+    ctx.arc(x,y-2,11,Math.PI,0);
+    ctx.lineTo(x+11,y+10);
+    ctx.lineTo(x+5,y+6);
+    ctx.lineTo(x,y+10);
+    ctx.lineTo(x-5,y+6);
+    ctx.lineTo(x-11,y+10);
+    ctx.closePath();
+    ctx.fill();
+
+    // 눈
+    ctx.fillStyle = "white";
+    ctx.beginPath();
+    ctx.arc(x-4,y-2,3.5,0,Math.PI*2);
+    ctx.arc(x+4,y-2,3.5,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = "#222";
+    ctx.beginPath();
+    ctx.arc(x-3,y-2,1.5,0,Math.PI*2);
+    ctx.arc(x+5,y-2,1.5,0,Math.PI*2);
+    ctx.fill();
+}
+
+function drawMap() {
+    for (let y=0;y<rows;y++) {
+        for (let x=0;x<cols;x++) {
+            if (map[y][x] === 1) {
+                ctx.fillStyle = "#1725a8";
+                ctx.fillRect(
+                    x*size+2,y*size+2,
+                    size-4,size-4
+                );
+
+                ctx.strokeStyle = "#5369ff";
+                ctx.strokeRect(
+                    x*size+3,y*size+3,
+                    size-6,size-6
+                );
+            }
+
+            if (map[y][x] === 0) {
+                ctx.fillStyle = "#ffe7ae";
+                ctx.beginPath();
+                ctx.arc(
+                    x*size+14,y*size+14,
+                    3,0,Math.PI*2
+                );
+                ctx.fill();
+            }
+        }
+    }
+}
+
+function draw() {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    drawMap();
+
+    ghosts.forEach(drawGhost);
+    drawPacman();
+
+    if (gameOver || won) {
+        ctx.fillStyle = "rgba(0,0,0,0.8)";
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+
+        ctx.fillStyle = won ? "#ffdf00" : "#ff5555";
+        ctx.font = "bold 38px Arial";
+        ctx.textAlign = "center";
+
+        ctx.fillText(
+            won ? "YOU WIN!" : "GAME OVER",
+            canvas.width/2,
+            canvas.height/2
+        );
+
+        ctx.font = "18px Arial";
+        ctx.fillStyle = "white";
+        ctx.fillText(
+            "다시 시작 버튼을 눌러주세요",
+            canvas.width/2,
+            canvas.height/2+40
+        );
+    }
+}
+
+function loop() {
+    if (!gameOver && !won) {
+        tick++;
+
+        if (tick % 7 === 0) {
+            movePacman();
+        }
+
+        if (tick % 12 === 0) {
+            moveGhosts();
+            checkCollision();
+        }
+    }
+
+    draw();
+    requestAnimationFrame(loop);
+}
+
+restart();
+loop();
+
+</script>
+</body>
+</html>
